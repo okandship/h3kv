@@ -1,0 +1,5 @@
+{
+	"name": "@okandship/h3kv",
+	"version": "0.1.0",
+	"exports": "./index.ts"
+}
