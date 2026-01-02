@@ -1,25 +1,26 @@
 {
-	"name": "@okandship/h3kv",
-	"description": "H3KV is a tiny, type-safe library for bidirectional conversion between a simple, human-readable markdown format and javascript/typescript data objects, powered by zod and the unified/remark ecosystem",
-	"version": "0.1.0",
-	"module": "index.ts",
-	"type": "module",
-	"license": "MIT",
-	"devDependencies": {
-		"@biomejs/biome": "2.3.10",
-		"@types/bun": "latest",
-		"zod": "^4.0.0"
-	},
-	"peerDependencies": {
-		"typescript": "^5",
-		"zod": "^4.0.0"
-	},
-	"dependencies": {
-		"mdast": "^3.0.0",
-		"mdast-util-to-string": "^4.0.0",
-		"remark-parse": "^11.0.0",
-		"remark-stringify": "^11.0.0",
-		"unified": "^11.0.5",
-		"unist-util-visit": "^5.0.0"
-	}
+  "name": "@okandship/h3kv",
+  "description": "H3KV is a tiny, type-safe library for bidirectional conversion between a simple, human-readable markdown format and javascript/typescript data objects, powered by zod and the unified/remark ecosystem",
+  "version": "0.1.0",
+  "module": "index.ts",
+  "type": "module",
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "2.3.10",
+    "@types/bun": "latest",
+    "ultracite": "7.0.5",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5",
+    "zod": "^4.0.0"
+  },
+  "dependencies": {
+    "mdast": "^3.0.0",
+    "mdast-util-to-string": "^4.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0"
+  }
 }

@@ -3,11 +3,11 @@ import { dataObjectToMarkdown, markdownToDataObject } from "./index";
 
 // define your schema (single source of truth)
 const ProfileSchema = z.object({
-	name: z.string(),
-	age: z.coerce.number().int().positive(),
-	"favorite colors": z.array(z.string()),
-	email: z.email(),
-	phone: z.string().optional(),
+  name: z.string(),
+  age: z.coerce.number().int().positive(),
+  "favorite colors": z.array(z.string()),
+  email: z.email(),
+  phone: z.string().optional(),
 });
 
 const markdown = `
