@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dataObjectToMarkdown, markdownToDataObject } from "./index";
+import { dataObjectToMarkdown, markdownToDataObject } from "./index.ts";
 
 // define your schema (single source of truth)
 const ProfileSchema = z.object({

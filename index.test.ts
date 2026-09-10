@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
   type DataObjectToMarkdownOptions,
   dataObjectToMarkdown,
   markdownToDataObject,
-} from "./index";
+} from "./index.ts";
 
 const SERIALIZE_ERROR = /cannot serialize key "profile"/;
 const KEY_COLLISION_ERROR = /both normalize to heading "name"/;

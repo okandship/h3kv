@@ -234,8 +234,9 @@ github renders [issue forms](https://docs.github.com/en/communities/using-templa
 ### development
 
 ```bash
-bun install
-bun run check   # lint + typecheck + tests
+npm install
+npm run check   # lint + typecheck + tests
+node example.ts
 ```
 
 ### license
