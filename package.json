@@ -1,7 +1,7 @@
 {
   "name": "@okandship/h3kv",
   "description": "H3KV is a tiny, type-safe library for bidirectional conversion between a simple, human-readable markdown format and javascript/typescript data objects, powered by zod and the unified/remark ecosystem",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "module": "index.ts",
   "type": "module",
   "license": "MIT",

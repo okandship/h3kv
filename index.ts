@@ -7,13 +7,6 @@ import type { $ZodObject, $ZodType, output } from "zod/v4/core";
 
 type SchemaObject = $ZodObject;
 
-type SchemaOutput<T extends SchemaObject> = output<T>;
-
-type SchemaOutputKey<T extends SchemaObject> = Extract<
-  keyof SchemaOutput<T>,
-  string
->;
-
 /** Raw values collected from markdown before schema validation. */
 type RawData = Record<string, string | string[]>;
 
@@ -249,6 +242,7 @@ function appendValues(
 /*                                 public api                                 */
 /* -------------------------------------------------------------------------- */
 
+/** Options for {@linkcode markdownToDataObject}. */
 export interface MarkdownToDataObjectOptions {
   /**
    * Treat a paragraph consisting solely of `_No response_` as an absent value.
@@ -259,12 +253,13 @@ export interface MarkdownToDataObjectOptions {
   githubIssueFormNullValueSupport?: boolean;
 }
 
-export interface DataObjectToMarkdownOptions<T extends SchemaObject> {
+/** Options for {@linkcode dataObjectToMarkdown}. */
+export interface DataObjectToMarkdownOptions<T extends $ZodObject> {
   /**
    * Keys to emit, in order. Defaults to the schema's key order.
    * Keys whose value is `null`, `undefined` or a blank string are skipped.
    */
-  outputOrder?: readonly SchemaOutputKey<T>[];
+  outputOrder?: readonly Extract<keyof output<T>, string>[];
   /**
    * Heading level used for keys.
    *
@@ -287,11 +282,11 @@ export interface DataObjectToMarkdownOptions<T extends SchemaObject> {
  * @throws {ZodError} when the collected data does not satisfy `schema`.
  * @throws {Error} when two schema keys differ only by case or whitespace.
  */
-export function markdownToDataObject<T extends SchemaObject>(
+export function markdownToDataObject<T extends $ZodObject>(
   markdown: string,
   schema: T,
   { githubIssueFormNullValueSupport = true }: MarkdownToDataObjectOptions = {}
-): SchemaOutput<T> {
+): output<T> {
   const { keyByHeading, arrayKeys } = inspectSchema(schema);
   const tree = unified().use(remarkParse).parse(markdown);
   // null prototype: heading text like "constructor" must not hit Object.prototype
@@ -426,8 +421,8 @@ function arrayToNodes(values: unknown[], key: string): RootContent[] {
  * @throws {TypeError} when a value is not a primitive, Date, or array of those.
  * @throws {Error} when two schema keys differ only by case or whitespace.
  */
-export function dataObjectToMarkdown<T extends SchemaObject>(
-  data: SchemaOutput<T>,
+export function dataObjectToMarkdown<T extends $ZodObject>(
+  data: output<T>,
   schema: T,
   { outputOrder, headingDepth = 3 }: DataObjectToMarkdownOptions<T> = {}
 ): string {
@@ -435,7 +430,8 @@ export function dataObjectToMarkdown<T extends SchemaObject>(
   inspectSchema(schema);
 
   const keys =
-    outputOrder ?? (Object.keys(schema._zod.def.shape) as SchemaOutputKey<T>[]);
+    outputOrder ??
+    (Object.keys(schema._zod.def.shape) as Extract<keyof output<T>, string>[]);
 
   const children: RootContent[] = [];
 
