@@ -3,7 +3,7 @@
 [![JSR](https://jsr.io/badges/@okandship/h3kv)](https://jsr.io/@okandship/h3kv)
 [![ci](https://github.com/okandship/H3KV/actions/workflows/ci.yml/badge.svg)](https://github.com/okandship/H3KV/actions/workflows/ci.yml)
 
-<img width="1536" height="1024" alt="H3KV: markdown headings as keys, content as values, validated by zod" src="https://github.com/user-attachments/assets/9fc43a91-59be-4dc2-8673-8716e1644b9d" />
+<img width="1774" height="887" alt="H3KV: markdown headings as keys, content as values, validated by zod" src="https://github.com/user-attachments/assets/079829e6-c165-4954-bc8b-ede018ad5532" />
 
 **H3KV** is a tiny, type-safe library for bidirectional conversion between a simple, human-readable markdown format and javascript/typescript data objects, powered by zod and the unified/remark ecosystem
 
