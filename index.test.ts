@@ -6,6 +6,9 @@ import {
   markdownToDataObject,
 } from "./index";
 
+const SERIALIZE_ERROR = /cannot serialize key "profile"/;
+const KEY_COLLISION_ERROR = /both normalize to heading "name"/;
+
 const MinimalSchema = z.strictObject({
   value: z.string(),
 });
@@ -27,7 +30,6 @@ const KitchenPriorityEnum = z.enum(["low", "medium", "high", "critical"]);
 const KitchenLabelEnum = z.enum(["bug", "feature", "docs", "refactor", "test"]);
 const KitchenCategoryEnum = z.enum(["tech", "science", "culture", "news"]);
 
-// TODO add optional arrays
 const KitchenSinkSchema = z.strictObject({
   // basic strings
   title: z.string().min(1),
@@ -63,6 +65,10 @@ const KitchenSinkSchema = z.strictObject({
   categories: z.array(KitchenCategoryEnum).default([]),
   quantities: z.array(z.coerce.number()).default([]),
 
+  // optional / nullish arrays (wrapped more than once)
+  aliases: z.array(z.string()).optional(),
+  mentions: z.array(z.string()).nullish(),
+
   // optional + transform
   notes: z
     .string()
@@ -90,6 +96,8 @@ const kitchenOptions: DataObjectToMarkdownOptions<typeof KitchenSinkSchema> = {
     "labels",
     "categories",
     "quantities",
+    "aliases",
+    "mentions",
     "notes",
   ] as const,
 };
@@ -153,6 +161,13 @@ critical
 - 0
 - 2
 
+### aliases
+- ally
+- al
+
+### mentions
+- @bob
+
 ### notes
   some note  
 `;
@@ -176,6 +191,8 @@ critical
         labels: ["bug", "docs"],
         categories: ["tech", "news"],
         quantities: [0, 2],
+        aliases: ["ally", "al"],
+        mentions: ["@bob"],
         notes: "some note",
       });
     });
@@ -315,6 +332,13 @@ low
       // array items include 0
       expect(markdown).toContain("### quantities");
       expect(markdown).toContain("- 0");
+
+      // empty arrays keep a bare heading (parses back to []), undefined arrays are omitted
+      expect(markdown).toContain(
+        "### tags\n\n### labels\n\n### categories\n\n### quantities"
+      );
+      expect(markdown).not.toContain("### aliases");
+      expect(markdown).not.toContain("### mentions");
 
       // heading does not exist and empty string is not rendered as a paragraph
       expect(markdown).not.toContain("### notes");
@@ -778,5 +802,391 @@ false
 
       expect(data).toEqual(original);
     });
+  });
+});
+
+describe("wrapped array schemas", () => {
+  const cases = {
+    "optional()": z.array(z.string()).optional(),
+    "nullable()": z.array(z.string()).nullable(),
+    "nullish()": z.array(z.string()).nullish(),
+    "optional().default([])": z.array(z.string()).optional().default([]),
+    "default([]).optional()": z.array(z.string()).default([]).optional(),
+    "catch([])": z.array(z.string()).catch([]),
+    "readonly()": z.array(z.string()).readonly(),
+    "nonoptional()": z.array(z.string()).optional().nonoptional(),
+  };
+
+  for (const [name, field] of Object.entries(cases)) {
+    test(`detects z.array().${name} as an array field`, () => {
+      const schema = z.object({ items: field });
+      const result = markdownToDataObject("### items\n- a\n- b", schema);
+      expect(result.items).toEqual(["a", "b"]);
+    });
+  }
+
+  test("detects arrays behind a transform", () => {
+    const schema = z.object({
+      count: z.array(z.string()).transform((items) => items.length),
+    });
+    expect(markdownToDataObject("### count\n- a\n- b", schema).count).toBe(2);
+  });
+
+  test("a pipe whose input is a string is not treated as an array", () => {
+    const schema = z.object({
+      words: z.string().pipe(z.string().transform((s) => s.split(" "))),
+    });
+    expect(markdownToDataObject("### words\nfoo bar", schema).words).toEqual([
+      "foo",
+      "bar",
+    ]);
+  });
+});
+
+describe("empty arrays", () => {
+  const schema = z.object({ title: z.string(), items: z.array(z.string()) });
+
+  test("serialize as a bare heading instead of being dropped", () => {
+    const markdown = dataObjectToMarkdown({ title: "x", items: [] }, schema);
+    expect(markdown).toBe("### title\n\nx\n\n### items");
+  });
+
+  test("a bare heading parses to [] for an array field", () => {
+    expect(markdownToDataObject("### title\nx\n\n### items", schema)).toEqual({
+      title: "x",
+      items: [],
+    });
+  });
+
+  test("round-trip a required array field with no items", () => {
+    const original = { title: "x", items: [] };
+    const markdown = dataObjectToMarkdown(original, schema);
+    expect(markdownToDataObject(markdown, schema)).toEqual(original);
+  });
+
+  test("a bare heading for a scalar field leaves the key undefined", () => {
+    const optional = z.object({ note: z.string().optional() });
+    expect(markdownToDataObject("### note", optional)).toEqual({});
+  });
+});
+
+describe("line breaks and nesting", () => {
+  test("hard line breaks (trailing spaces) become newlines, not glued words", () => {
+    const schema = z.object({ text: z.string() });
+    const result = markdownToDataObject("### text\nline a  \nline b", schema);
+    expect(result.text).toBe("line a\nline b");
+  });
+
+  test("hard line breaks (backslash) become newlines", () => {
+    const schema = z.object({ text: z.string() });
+    const result = markdownToDataObject("### text\nline a\\\nline b", schema);
+    expect(result.text).toBe("line a\nline b");
+  });
+
+  test("hard line breaks split array values", () => {
+    const schema = z.object({ items: z.array(z.string()) });
+    const result = markdownToDataObject("### items\na  \nb", schema);
+    expect(result.items).toEqual(["a", "b"]);
+  });
+
+  test("nested list items are separated by newlines inside their parent item", () => {
+    const schema = z.object({ items: z.array(z.string()) });
+    const markdown = `
+### items
+- outer
+  - nested
+- second
+`;
+    const result = markdownToDataObject(markdown, schema);
+    expect(result.items).toEqual(["outer\nnested", "second"]);
+  });
+
+  test("inline formatting and links are reduced to their text", () => {
+    const schema = z.object({ text: z.string() });
+    const markdown =
+      "### text\n**bold** _em_ `code` [link](https://x.y) ![alt](i.png)";
+    expect(markdownToDataObject(markdown, schema).text).toBe(
+      "bold em code link alt"
+    );
+  });
+});
+
+describe("block types", () => {
+  test("fenced code blocks are read verbatim for string fields", () => {
+    const schema = z.object({ logs: z.string() });
+    const markdown = "### logs\n```sh\n  indented\n\nafter blank\n```";
+    expect(markdownToDataObject(markdown, schema).logs).toBe(
+      "  indented\n\nafter blank"
+    );
+  });
+
+  test("fenced code blocks are split into lines for array fields", () => {
+    const schema = z.object({ lines: z.array(z.string()) });
+    const markdown = "### lines\n```\na\n  b\n\nc\n```";
+    expect(markdownToDataObject(markdown, schema).lines).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  test("blockquotes contribute their text", () => {
+    const schema = z.object({ quote: z.string() });
+    const markdown = "### quote\n> first\n>\n> second";
+    expect(markdownToDataObject(markdown, schema).quote).toBe("first\nsecond");
+  });
+
+  test("inline html is kept as written", () => {
+    const schema = z.object({ text: z.string() });
+    const markdown = "### text\nContact <b>me</b> now<br>bye";
+    expect(markdownToDataObject(markdown, schema).text).toBe(
+      "Contact <b>me</b> now<br>bye"
+    );
+  });
+
+  test("top-level html blocks and thematic breaks are ignored", () => {
+    const schema = z.object({ value: z.string() });
+    const markdown = "### value\n---\n\n<div>html</div>\n\nkept";
+    expect(markdownToDataObject(markdown, schema).value).toBe("kept");
+  });
+
+  test("code blocks under an unknown heading are ignored", () => {
+    const markdown = "### other\n```\nignored\n```\n\n### value\nkept";
+    expect(markdownToDataObject(markdown, MinimalSchema).value).toBe("kept");
+  });
+});
+
+describe("github issue form null values", () => {
+  const schema = z.object({ note: z.string().optional() });
+
+  test("_No response_ is treated as empty by default", () => {
+    expect(markdownToDataObject("### note\n_No response_", schema)).toEqual({});
+  });
+
+  test("_No response_ followed by real content keeps the content", () => {
+    expect(
+      markdownToDataObject("### note\n_No response_\n\nreal", schema).note
+    ).toBe("real");
+  });
+
+  test("plain 'No response' without emphasis is kept", () => {
+    expect(markdownToDataObject("### note\nNo response", schema).note).toBe(
+      "No response"
+    );
+  });
+
+  test("can be disabled", () => {
+    expect(
+      markdownToDataObject("### note\n_No response_", schema, {
+        githubIssueFormNullValueSupport: false,
+      }).note
+    ).toBe("No response");
+  });
+
+  test("leaves an optional array field absent instead of []", () => {
+    const arrays = z.object({
+      labels: z.array(z.string()).min(1).optional(),
+    });
+    expect(markdownToDataObject("### labels\n_No response_", arrays)).toEqual(
+      {}
+    );
+  });
+
+  test("does not erase array items collected before it", () => {
+    const arrays = z.object({ labels: z.array(z.string()) });
+    expect(
+      markdownToDataObject("### labels\n- a\n\n_No response_", arrays).labels
+    ).toEqual(["a"]);
+  });
+});
+
+describe("empty array semantics", () => {
+  test("a bare heading means explicitly empty, so it wins over .default()", () => {
+    const schema = z.object({ tags: z.array(z.string()).default(["none"]) });
+    expect(markdownToDataObject("### tags", schema).tags).toEqual([]);
+    expect(markdownToDataObject("", schema).tags).toEqual(["none"]);
+  });
+
+  test("an array of only blank strings is written as a bare heading", () => {
+    const schema = z.object({ items: z.array(z.string()) });
+    const markdown = dataObjectToMarkdown({ items: ["  ", ""] }, schema);
+    expect(markdown).toBe("### items");
+    expect(markdownToDataObject(markdown, schema).items).toEqual([]);
+  });
+});
+
+describe("array detection through non-wrapper schemas", () => {
+  test("z.lazy", () => {
+    const schema = z.object({ items: z.lazy(() => z.array(z.string())) });
+    expect(markdownToDataObject("### items\n- a\n- b", schema).items).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  test("z.preprocess", () => {
+    const schema = z.object({
+      items: z.preprocess((v) => v, z.array(z.string())),
+    });
+    expect(markdownToDataObject("### items\n- a\n- b", schema).items).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  test("a union whose branches are all arrays", () => {
+    const schema = z.object({
+      items: z.union([z.array(z.string()), z.array(z.coerce.number())]),
+    });
+    expect(markdownToDataObject("### items\n- a\n- b", schema).items).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  test("a union mixing arrays and scalars is read as a scalar", () => {
+    const schema = z.object({
+      value: z.union([z.array(z.string()), z.string()]),
+    });
+    expect(markdownToDataObject("### value\ntext", schema).value).toBe("text");
+  });
+});
+
+describe("Object.prototype names", () => {
+  test("a schema key named constructor works", () => {
+    const schema = z.strictObject({ constructor: z.string() });
+    expect(markdownToDataObject("### constructor\nx", schema).constructor).toBe(
+      "x"
+    );
+  });
+
+  test("a heading named constructor with no matching key is ignored", () => {
+    const markdown = "### constructor\njunk\n\n### value\nkept";
+    expect(markdownToDataObject(markdown, MinimalSchema)).toEqual({
+      value: "kept",
+    });
+  });
+
+  test("an array key named toString with a bare heading yields []", () => {
+    const schema = z.strictObject({ toString: z.array(z.string()) });
+    expect(markdownToDataObject("### toString", schema).toString).toEqual([]);
+  });
+});
+
+describe("whitespace-significant strings", () => {
+  const schema = z.object({ logs: z.string() });
+
+  test("strings with indentation or blank lines are written as code blocks", () => {
+    const markdown = dataObjectToMarkdown({ logs: "a\n  b\n\nc" }, schema);
+    expect(markdown).toBe("### logs\n\n```\na\n  b\n\nc\n```");
+  });
+
+  test("a parsed code block round-trips byte for byte", () => {
+    const original = "### logs\n\n```\n  indented\n\nafter blank\n```";
+    const parsed = markdownToDataObject(original, schema);
+    expect(parsed.logs).toBe("  indented\n\nafter blank");
+    const rewritten = dataObjectToMarkdown(parsed, schema);
+    expect(rewritten).toBe(original);
+    expect(markdownToDataObject(rewritten, schema)).toEqual(parsed);
+  });
+
+  test("a value containing a fence still round-trips", () => {
+    const value = "```\n  x\n```";
+    const markdown = dataObjectToMarkdown({ logs: value }, schema);
+    expect(markdownToDataObject(markdown, schema).logs).toBe(value);
+  });
+});
+
+describe("errors", () => {
+  test("validation failures throw a ZodError", () => {
+    const schema = z.object({ n: z.coerce.number() });
+    let caught: unknown;
+    try {
+      markdownToDataObject("### n\nnot a number", schema);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(z.ZodError);
+  });
+
+  test("missing required fields throw a ZodError", () => {
+    expect(() =>
+      markdownToDataObject("no headings here", MinimalSchema)
+    ).toThrow(z.ZodError);
+  });
+
+  test("serializing nested objects throws a descriptive TypeError", () => {
+    const schema = z.object({ profile: z.object({ name: z.string() }) });
+    expect(() =>
+      dataObjectToMarkdown({ profile: { name: "x" } }, schema)
+    ).toThrow(SERIALIZE_ERROR);
+  });
+
+  test("serializing nested arrays throws a descriptive TypeError", () => {
+    const schema = z.object({ matrix: z.array(z.array(z.number())) });
+    expect(() => dataObjectToMarkdown({ matrix: [[1]] }, schema)).toThrow(
+      TypeError
+    );
+  });
+
+  test("schema keys that collide after normalization throw on parse", () => {
+    const schema = z.object({
+      Name: z.string().optional(),
+      name: z.string().optional(),
+    });
+    expect(() => markdownToDataObject("### name\nx", schema)).toThrow(
+      KEY_COLLISION_ERROR
+    );
+  });
+
+  test("schema keys that collide after normalization throw on serialize", () => {
+    const schema = z.object({ Name: z.string(), name: z.string() });
+    expect(() =>
+      dataObjectToMarkdown({ Name: "a", name: "b" }, schema)
+    ).toThrow(KEY_COLLISION_ERROR);
+  });
+
+  test("an invalid Date throws a descriptive TypeError", () => {
+    const schema = z.object({ when: z.date() });
+    expect(() =>
+      dataObjectToMarkdown({ when: new Date(Number.NaN) }, schema)
+    ).toThrow(TypeError);
+  });
+});
+
+describe("dataObjectToMarkdown options", () => {
+  test("headingDepth controls the heading level", () => {
+    const markdown = dataObjectToMarkdown({ value: "x" }, MinimalSchema, {
+      headingDepth: 2,
+    });
+    expect(markdown).toBe("## value\n\nx");
+  });
+
+  test("dates at midnight UTC are written as YYYY-MM-DD, others as full ISO", () => {
+    const schema = z.object({
+      day: z.coerce.date(),
+      moment: z.coerce.date(),
+    });
+    const data = {
+      day: new Date("2024-03-05T00:00:00.000Z"),
+      moment: new Date("2024-03-05T13:45:00.000Z"),
+    };
+    const markdown = dataObjectToMarkdown(data, schema);
+    expect(markdown).toContain("### day\n\n2024-03-05\n");
+    expect(markdown).toContain("### moment\n\n2024-03-05T13:45:00.000Z");
+    expect(markdownToDataObject(markdown, schema)).toEqual(data);
+  });
+
+  test("dates outside years 0000-9999 keep their expanded ISO year", () => {
+    const schema = z.object({ when: z.coerce.date() });
+    const data = { when: new Date("+010000-03-15T00:00:00.000Z") };
+    const markdown = dataObjectToMarkdown(data, schema);
+    expect(markdown).toBe("### when\n\n+010000-03-15");
+    expect(markdownToDataObject(markdown, schema)).toEqual(data);
+  });
+
+  test("multi-line strings become one paragraph per line", () => {
+    const markdown = dataObjectToMarkdown({ value: "a\nb" }, MinimalSchema);
+    expect(markdown).toBe("### value\n\na\n\nb");
   });
 });

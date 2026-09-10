@@ -1,13 +1,25 @@
 {
   "name": "@okandship/h3kv",
   "description": "H3KV is a tiny, type-safe library for bidirectional conversion between a simple, human-readable markdown format and javascript/typescript data objects, powered by zod and the unified/remark ecosystem",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "module": "index.ts",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/okandship/H3KV.git"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "ultracite check",
+    "format": "ultracite fix",
+    "check": "bun run lint && bun run typecheck && bun test"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.3.10",
     "@types/bun": "latest",
+    "typescript": "^5",
     "ultracite": "7.0.5",
     "zod": "^4.0.0"
   },
@@ -16,11 +28,9 @@
     "zod": "^4.0.0"
   },
   "dependencies": {
-    "mdast": "^3.0.0",
-    "mdast-util-to-string": "^4.0.0",
+    "@types/mdast": "^4.0.0",
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
-    "unified": "^11.0.5",
-    "unist-util-visit": "^5.0.0"
+    "unified": "^11.0.5"
   }
 }
